@@ -2,7 +2,6 @@ import React, { useEffect, useRef } from "react";
 import { Animated, Text, StyleSheet } from "react-native";
 
 const WelcomeScreen = () => {
-  // Initialize animated values for opacity and scale
   const fadeAnim = useRef(new Animated.Value(0)).current; // For opacity
   const scaleAnim = useRef(new Animated.Value(0.5)).current; // For scaling (starting small)
 

@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 import WelcomeScreen from "./src/screens/WelcomeScreen";
 import { useEffect, useState } from "react";
 import HomeScreen from "./src/screens/HomeScreen";
+import React from "react";
 
 export default function App() {
   const [showWelcome, setShowWelcome] = useState(true);
@@ -14,18 +15,11 @@ export default function App() {
 
     return () => clearTimeout(timer);
   }, []);
-  return (
-    <View style={styles.container}>
-      {showWelcome ? <WelcomeScreen /> : <HomeScreen />}
-    </View>
-  );
+  return showWelcome ? <WelcomeScreen /> : <HomeScreen />;
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
-    alignItems: "center",
-    justifyContent: "center",
   },
 });
