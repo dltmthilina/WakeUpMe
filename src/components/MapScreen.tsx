@@ -1,123 +1,98 @@
-import { useEffect, useState } from "react";
-import { Text, StyleSheet, View, ActivityIndicator } from "react-native";
-import * as Location from "expo-location";
+import React, { forwardRef, useImperativeHandle, useRef } from "react";
+import { StyleSheet, View } from "react-native";
 import { WebView } from "react-native-webview";
+export type MapScreenHandle = {
+  enablePickMode: (enable: boolean) => void;
+  setDestination: (lat: number, lon: number) => void;
+  drawRoute: (
+    fromLat: number,
+    fromLon: number,
+    toLat: number,
+    toLon: number
+  ) => void;
+  setGrace: (lat: number, lon: number, radiusMeters: number) => void;
+  clearGrace: () => void;
+  setCurrentLocation: (lat: number, lon: number) => void;
+};
 
-const MapScreen = () => {
-  const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [locationError, setLocationError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+type Props = {
+  initialLat: number;
+  initialLon: number;
+  onMapClick: (lat: number, lon: number) => void;
+  onRouteError?: (message?: string) => void;
+  onMapReady?: () => void;
+};
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== "granted") {
-          setLocationError("Location permission denied");
-          setLoading(false);
-          return;
-        }
+const MapScreen = forwardRef<MapScreenHandle, Props>(
+  ({ initialLat, initialLon, onMapClick, onRouteError, onMapReady }, ref) => {
+    const webViewRef = useRef<WebView | null>(null);
 
-        const current = await Location.getCurrentPositionAsync({});
-        setCoords({
-          latitude: current.coords.latitude,
-          longitude: current.coords.longitude,
-        });
-      } catch (e: any) {
-        setLocationError(e?.message ?? "Failed to get location");
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+    useImperativeHandle(ref, () => ({
+      enablePickMode: (enable: boolean) => {
+        webViewRef.current?.injectJavaScript(
+          `window.enablePickMode && window.enablePickMode(${
+            enable ? "true" : "false"
+          }); true;`
+        );
+      },
+      setDestination: (lat: number, lon: number) => {
+        webViewRef.current?.injectJavaScript(
+          `window.setDestination && window.setDestination(${lat}, ${lon}); true;`
+        );
+      },
+      drawRoute: (fromLat, fromLon, toLat, toLon) => {
+        webViewRef.current?.injectJavaScript(
+          `window.drawRoute && window.drawRoute(${fromLat}, ${fromLon}, ${toLat}, ${toLon}); true;`
+        );
+      },
+      setGrace: (lat, lon, r) => {
+        webViewRef.current?.injectJavaScript(
+          `window.setGrace && window.setGrace(${lat}, ${lon}, ${r}); true;`
+        );
+      },
+      clearGrace: () => {
+        webViewRef.current?.injectJavaScript(
+          `window.clearGrace && window.clearGrace(); true;`
+        );
+      },
+      setCurrentLocation: (lat, lon) => {
+        webViewRef.current?.injectJavaScript(
+          `window.setCurrentLocation && window.setCurrentLocation(${lat}, ${lon}); true;`
+        );
+      },
+    }));
 
-  // no-op: WebView map is centered from injected HTML
-
-  return (
-    <View style={styles.container}>
-      {loading && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" />
-          <Text style={styles.loadingText}>Fetching your location…</Text>
-        </View>
-      )}
-
-      {!loading && coords && (
+    return (
+      <View style={styles.container}>
         <WebView
+          ref={webViewRef}
           style={styles.map}
           originWhitelist={["*"]}
           javaScriptEnabled
           domStorageEnabled
           setSupportMultipleWindows={false}
-          source={{ html: buildLeafletHtml(coords.latitude, coords.longitude) }}
+          onMessage={(e) => {
+            try {
+              const data = JSON.parse(e.nativeEvent.data);
+              if (data?.type === "mapClick") {
+                onMapClick(data.lat, data.lon);
+              } else if (data?.type === "routeError") {
+                onRouteError?.(data.message || "Failed to draw route");
+              } else if (data?.type === "ready") {
+                onMapReady?.();
+              }
+            } catch {}
+          }}
+          source={{ html: buildLeafletHtml(initialLat, initialLon) }}
         />
-      )}
-
-      {/* OSM attribution (required) */}
-      {!loading && coords && (
-        <View style={styles.attributionWrapper} pointerEvents="none">
-          <Text style={styles.attributionText}>© OpenStreetMap contributors</Text>
-        </View>
-      )}
-
-      {locationError && (
-        <View style={styles.errorBanner}>
-          <Text style={styles.errorText}>{locationError}</Text>
-        </View>
-      )}
-    </View>
-  );
-};
+      </View>
+    );
+  }
+);
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#fff",
-  },
-  map: {
-    flex: 1,
-  },
-  attributionWrapper: {
-    position: "absolute",
-    bottom: 6,
-    right: 8,
-    backgroundColor: "rgba(255,255,255,0.9)",
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  attributionText: {
-    fontSize: 11,
-    color: "#333",
-  },
-  loadingOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 2,
-  },
-  loadingText: {
-    marginTop: 8,
-  },
-  errorBanner: {
-    position: "absolute",
-    top: 40,
-    left: 20,
-    right: 20,
-    backgroundColor: "#fee2e2",
-    borderColor: "#fecaca",
-    borderWidth: 1,
-    padding: 8,
-    borderRadius: 6,
-  },
-  errorText: {
-    color: "#b91c1c",
-    textAlign: "center",
-  },
+  container: { flex: 1, backgroundColor: "#fff" },
+  map: { flex: 1 },
 });
 
 export default MapScreen;
@@ -146,12 +121,103 @@ function buildLeafletHtml(lat: number, lon: number) {
       <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
       <script>
-        const map = L.map('map', { zoomControl: true }).setView([${lat}, ${lon}], 15);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        const current = { lat: ${lat}, lon: ${lon} };
+        const map = L.map('map', { zoomControl: true }).setView([current.lat, current.lon], 15);
+        const base = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           attribution: '© OpenStreetMap contributors',
           maxZoom: 19,
         }).addTo(map);
-        L.marker([${lat}, ${lon}]).addTo(map).bindPopup('You are here').openPopup();
+  let you = L.marker([current.lat, current.lon]).addTo(map).bindPopup('You are here');
+
+        let pickMode = false;
+        let destMarker = null;
+  let routeLayer = L.layerGroup().addTo(map);
+  let graceCircle = null;
+
+        function sendMessage(obj) {
+          try {
+            if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+              window.ReactNativeWebView.postMessage(JSON.stringify(obj));
+            }
+          } catch (e) {}
+        }
+
+        // Enable/disable pick mode from RN
+        window.enablePickMode = function (enable) {
+          pickMode = !!enable;
+        };
+
+        // Allow RN to set destination marker explicitly (e.g., after text geocoding)
+        window.setDestination = function(lat, lon) {
+          if (!destMarker) {
+            destMarker = L.marker([lat, lon]).addTo(map).bindPopup('Destination');
+          } else {
+            destMarker.setLatLng([lat, lon]);
+          }
+          map.panTo([lat, lon]);
+        };
+
+        // Update current location marker
+        window.setCurrentLocation = function(lat, lon) {
+          if (!you) {
+            you = L.marker([lat, lon]).addTo(map).bindPopup('You are here');
+          } else {
+            you.setLatLng([lat, lon]);
+          }
+        };
+
+        // Draw route using OSRM demo server (for development only)
+        window.drawRoute = async function(fromLat, fromLon, toLat, toLon) {
+          try {
+            routeLayer.clearLayers();
+            var url = 'https://router.project-osrm.org/route/v1/driving/' + fromLon + ',' + fromLat + ';' + toLon + ',' + toLat + '?overview=full&geometries=geojson';
+            var res = await fetch(url);
+            var json = await res.json();
+            if (!json || json.code !== 'Ok' || !json.routes || !json.routes[0]) {
+              sendMessage({ type: 'routeError', message: 'No route found' });
+              return;
+            }
+            var coords = json.routes[0].geometry.coordinates.map(function(p) { return [p[1], p[0]]; });
+            var poly = L.polyline(coords, { color: '#1e90ff', weight: 4 });
+            routeLayer.addLayer(poly);
+            map.fitBounds(poly.getBounds(), { padding: [30, 30] });
+          } catch (e) {
+            sendMessage({ type: 'routeError', message: String(e) });
+          }
+        };
+
+        // Grace circle controls
+        window.setGrace = function(lat, lon, radiusMeters) {
+          if (graceCircle) {
+            graceCircle.setLatLng([lat, lon]);
+            graceCircle.setRadius(radiusMeters);
+          } else {
+            graceCircle = L.circle([lat, lon], { radius: radiusMeters, color: '#f59e0b', fillColor: '#fbbf24', fillOpacity: 0.2 });
+            graceCircle.addTo(map);
+          }
+        };
+        window.clearGrace = function() {
+          if (graceCircle) {
+            map.removeLayer(graceCircle);
+            graceCircle = null;
+          }
+        };
+
+        map.on('click', function(e) {
+          if (!pickMode) return;
+          var lat = e.latlng.lat;
+          var lng = e.latlng.lng;
+          if (!destMarker) {
+            destMarker = L.marker([lat, lng]).addTo(map).bindPopup('Destination');
+          } else {
+            destMarker.setLatLng([lat, lng]);
+          }
+          pickMode = false; // auto-exit pick mode after selection
+          sendMessage({ type: 'mapClick', lat: lat, lon: lng });
+        });
+
+        // Notify RN the map is ready
+        setTimeout(function(){ sendMessage({ type: 'ready' }); }, 0);
       </script>
     </body>
   </html>`;

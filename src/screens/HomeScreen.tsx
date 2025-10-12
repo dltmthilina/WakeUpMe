@@ -1,10 +1,10 @@
 import { View, Text, StyleSheet } from "react-native";
-import MapScreen from "../components/MapScreen";
+import TripContainer from "../components/TripContainer";
 
 const HomeScreen = () => {
   return (
     <View style={styles.container}>
-      <MapScreen />
+      <TripContainer />
     </View>
   );
 };
