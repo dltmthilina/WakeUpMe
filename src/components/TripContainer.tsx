@@ -217,7 +217,13 @@ const TripContainer: React.FC = () => {
         }
       })
       .catch(() => {});
-    setDrawerOpen(false);
+    mapRef.current?.clearTrip();
+    mapRef.current?.clearGrace();
+    setDestCoords(null);
+    setDestInput("");
+    setRouteError(null);
+    setPickMode(false);
+    alarmedRef.current = false;
   };
 
   const initializeGeofencing = async (
@@ -381,16 +387,24 @@ const TripContainer: React.FC = () => {
         </View>
       )}
 
-      {!loading && !locationError && (
-        <>
-          <TouchableOpacity
-            style={styles.fab}
-            onPress={() => setDrawerOpen(true)}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.fabText}>Start Trip</Text>
-          </TouchableOpacity>
-        </>
+      {!loading && !locationError && !destCoords && (
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => setDrawerOpen(true)}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.fabText}>Start Trip</Text>
+        </TouchableOpacity>
+      )}
+
+      {!loading && !locationError && destCoords && (
+        <TouchableOpacity
+          style={[styles.fab, { backgroundColor: "#b91c1c" }]}
+          onPress={closeTrip}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.fabText}>Close Trip</Text>
+        </TouchableOpacity>
       )}
 
       {pickMode && (
@@ -404,7 +418,7 @@ const TripContainer: React.FC = () => {
       {drawerOpen && (
         <DestinationDrawer
           pickMode={pickMode}
-          onClose={closeTrip}
+          onClose={() => setDrawerOpen(false)}
           destInput={destInput}
           onChangeDestInput={setDestInput}
           suggestions={destInput.trim().length >= 2 ? suggestions : []}

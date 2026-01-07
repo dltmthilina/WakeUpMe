@@ -13,6 +13,7 @@ export type MapScreenHandle = {
   setGrace: (lat: number, lon: number, radiusMeters: number) => void;
   clearGrace: () => void;
   setCurrentLocation: (lat: number, lon: number) => void;
+  clearTrip: () => void;
 };
 
 type Props = {
@@ -58,6 +59,11 @@ const MapScreen = forwardRef<MapScreenHandle, Props>(
       setCurrentLocation: (lat, lon) => {
         webViewRef.current?.injectJavaScript(
           `window.setCurrentLocation && window.setCurrentLocation(${lat}, ${lon}); true;`
+        );
+      },
+      clearTrip: () => {
+        webViewRef.current?.injectJavaScript(
+          `window.clearTrip && window.clearTrip(); true;`
         );
       },
     }));
@@ -197,6 +203,21 @@ function buildLeafletHtml(lat: number, lon: number) {
           }
         };
         window.clearGrace = function() {
+          if (graceCircle) {
+            map.removeLayer(graceCircle);
+            graceCircle = null;
+          }
+        };
+
+        // Clear destination, route and grace circle
+        window.clearTrip = function() {
+          if (destMarker) {
+            map.removeLayer(destMarker);
+            destMarker = null;
+          }
+          if (routeLayer) {
+            routeLayer.clearLayers();
+          }
           if (graceCircle) {
             map.removeLayer(graceCircle);
             graceCircle = null;
