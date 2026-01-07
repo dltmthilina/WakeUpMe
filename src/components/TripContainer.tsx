@@ -5,17 +5,26 @@ import * as Haptics from "expo-haptics";
 import { Audio } from "expo-av";
 import MapScreen, { MapScreenHandle } from "./MapScreen";
 import DestinationDrawer, { Suggestion } from "./DestinationDrawer";
-
+import { GEOFENCE_TASK_NAME } from "../geofencingTask";
 
 const TripContainer: React.FC = () => {
-  const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [initialCoords, setInitialCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [coords, setCoords] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+  const [initialCoords, setInitialCoords] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [placeLabel, setPlaceLabel] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [pickMode, setPickMode] = useState(false);
-  const [destCoords, setDestCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [destCoords, setDestCoords] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
   const [destInput, setDestInput] = useState("");
   const [routeError, setRouteError] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -28,58 +37,57 @@ const TripContainer: React.FC = () => {
   const soundRef = useRef<Audio.Sound | null>(null);
   const mapRef = useRef<MapScreenHandle | null>(null);
 
-  // Initial location + reverse geocode + watcher
+  const getInitialLocation = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        setLoading(false);
+        setLocationError("Location permission denied");
+        return;
+      }
+
+      const current = await Location.getCurrentPositionAsync({});
+      const lat = current.coords.latitude;
+      const lon = current.coords.longitude;
+      const first = { latitude: lat, longitude: lon };
+      setCoords(first);
+      setInitialCoords(first);
+    } catch (e: any) {
+      console.log("Location error:", e);
+      setLocationError(e?.message ?? "Failed to get location");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getAddressFromCoords = async (lat: number, lon: number) => {
+    try {
+      const results = await Location.reverseGeocodeAsync({
+        latitude: lat,
+        longitude: lon,
+      });
+      if (results && results.length > 0) {
+        const a: any = results[0];
+        const locality = a.city || a.district || a.subregion || a.name;
+        const admin = a.region;
+        const country = a.country;
+        const label =
+          [locality, admin].filter(Boolean).join(", ") ||
+          country ||
+          "Unknown location";
+        setPlaceLabel(label);
+      }
+    } catch {
+      setPlaceLabel(null);
+    }
+  };
   useEffect(() => {
     (async () => {
       try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== "granted") {
-          setLocationError("Location permission denied");
-          setLoading(false);
-          return;
+        await getInitialLocation();
+        if (coords) {
+          await getAddressFromCoords(coords.latitude, coords.longitude);
         }
-
-        const current = await Location.getCurrentPositionAsync({});
-        const lat = current.coords.latitude;
-        const lon = current.coords.longitude;
-  const first = { latitude: lat, longitude: lon };
-  setCoords(first);
-  setInitialCoords(first);
-
-        // Reverse geocode for banner
-        try {
-          const results = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lon });
-          if (results && results.length > 0) {
-            const a: any = results[0];
-            const locality = a.city || a.district || a.subregion || a.name;
-            const admin = a.region;
-            const country = a.country;
-            const label = [locality, admin].filter(Boolean).join(", ") || country || "Unknown location";
-            setPlaceLabel(label);
-          }
-        } catch {}
-
-        // start watcher
-        try {
-          watchSub.current = await Location.watchPositionAsync(
-            { accuracy: Location.Accuracy.Balanced, timeInterval: 2000, distanceInterval: 5 },
-            (update) => {
-              const clat = update.coords.latitude;
-              const clon = update.coords.longitude;
-              setCoords({ latitude: clat, longitude: clon });
-              // move marker
-              mapRef.current?.setCurrentLocation(clat, clon);
-              // arrival check
-              if (destCoords && graceDistance > 0) {
-                const d = distanceMeters(clat, clon, destCoords.latitude, destCoords.longitude);
-                if (d <= graceDistance && !alarmedRef.current) {
-                  alarmedRef.current = true;
-                  triggerAlarm();
-                }
-              }
-            }
-          );
-        } catch {}
       } catch (e: any) {
         setLocationError(e?.message ?? "Failed to get location");
       } finally {
@@ -96,6 +104,13 @@ const TripContainer: React.FC = () => {
         soundRef.current.unloadAsync();
         soundRef.current = null;
       }
+      Location.hasStartedLocationUpdatesAsync(GEOFENCE_TASK_NAME)
+        .then((started) => {
+          if (started) {
+            return Location.stopLocationUpdatesAsync(GEOFENCE_TASK_NAME);
+          }
+        })
+        .catch(() => {});
     };
   }, []);
 
@@ -117,7 +132,9 @@ const TripContainer: React.FC = () => {
     suggestTimer.current = setTimeout(async () => {
       setSuggestLoading(true);
       try {
-        const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(text)}&lang=en`;
+        const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(
+          text
+        )}&lang=en`;
         const resp = await fetch(url);
         const data = await resp.json();
         const list: Suggestion[] = Array.isArray(data?.features)
@@ -125,7 +142,11 @@ const TripContainer: React.FC = () => {
               .slice(0, 10)
               .map((f: any) => {
                 const name = f?.properties?.name;
-                const city = f?.properties?.city || f?.properties?.town || f?.properties?.village || f?.properties?.state;
+                const city =
+                  f?.properties?.city ||
+                  f?.properties?.town ||
+                  f?.properties?.village ||
+                  f?.properties?.state;
                 const country = f?.properties?.country;
                 const label = [name, city, country].filter(Boolean).join(", ");
                 const lon = f?.geometry?.coordinates?.[0];
@@ -159,10 +180,15 @@ const TripContainer: React.FC = () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {}
     try {
-      await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: false });
+      await Audio.setAudioModeAsync({
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+      });
       if (!soundRef.current) {
         const { sound } = await Audio.Sound.createAsync(
-          { uri: "https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg" },
+          {
+            uri: "https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg",
+          },
           { shouldPlay: true, isLooping: true, volume: 1.0 }
         );
         soundRef.current = sound;
@@ -174,7 +200,97 @@ const TripContainer: React.FC = () => {
           if (soundRef.current === sound) soundRef.current = null;
         }, 8000);
       }
-    } catch {}
+    } catch (e) {
+      console.log("Alarm error:", e);
+    }
+  };
+
+  const closeTrip = () => {
+    if (watchSub.current) {
+      watchSub.current.remove();
+      watchSub.current = null;
+    }
+    Location.hasStartedLocationUpdatesAsync(GEOFENCE_TASK_NAME)
+      .then((started) => {
+        if (started) {
+          return Location.stopLocationUpdatesAsync(GEOFENCE_TASK_NAME);
+        }
+      })
+      .catch(() => {});
+    setDrawerOpen(false);
+  };
+
+  const initializeGeofencing = async (
+    destLat: number,
+    destLon: number,
+    graceMeters: number
+  ) => {
+    alarmedRef.current = false;
+
+    if (watchSub.current) {
+      watchSub.current.remove();
+      watchSub.current = null;
+    }
+
+    if (!graceMeters || graceMeters <= 0) {
+      return;
+    }
+
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        setLocationError("Location permission denied");
+        return;
+      }
+
+      // Request background permissions as well (best effort)
+      try {
+        const bg = await Location.requestBackgroundPermissionsAsync();
+        if (bg.status !== "granted") {
+          console.log("Background location permission not granted");
+        }
+      } catch {
+        // Older platforms may not support background permission separately
+      }
+
+      const hasStarted = await Location.hasStartedLocationUpdatesAsync(
+        GEOFENCE_TASK_NAME
+      );
+      if (!hasStarted) {
+        await Location.startLocationUpdatesAsync(GEOFENCE_TASK_NAME, {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 5000,
+          distanceInterval: 5,
+          showsBackgroundLocationIndicator: true,
+          foregroundService: {
+            notificationTitle: "TravelMate is running",
+            notificationBody: "Tracking your trip in the background.",
+          },
+        });
+      }
+
+      watchSub.current = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 5000,
+          distanceInterval: 5,
+        },
+        (loc) => {
+          const { latitude, longitude } = loc.coords;
+          setCoords({ latitude, longitude });
+          mapRef.current?.setCurrentLocation(latitude, longitude);
+
+          const dist = distanceMeters(latitude, longitude, destLat, destLon);
+          if (dist <= graceMeters && !alarmedRef.current) {
+            alarmedRef.current = true;
+            triggerAlarm();
+          }
+        }
+      );
+    } catch (e: any) {
+      console.log("Geofencing init error:", e);
+      setLocationError(e?.message ?? "Failed to start geofencing");
+    }
   };
 
   return (
@@ -207,7 +323,7 @@ const TripContainer: React.FC = () => {
             if (graceDistance > 0) {
               mapRef.current?.setGrace(lat, lon, graceDistance);
             }
-            alarmedRef.current = false;
+            initializeGeofencing(lat, lon, graceDistance);
           }}
           onRouteError={(msg) => setRouteError(msg || "Failed to draw route")}
           onMapReady={() => {
@@ -232,6 +348,11 @@ const TripContainer: React.FC = () => {
                   graceDistance
                 );
               }
+              initializeGeofencing(
+                destCoords.latitude,
+                destCoords.longitude,
+                graceDistance
+              );
             }
           }}
         />
@@ -264,14 +385,7 @@ const TripContainer: React.FC = () => {
         <>
           <TouchableOpacity
             style={styles.fab}
-            onPress={() => triggerAlarm()}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.fabText}>Start Trip</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            
-            onPress={() => triggerAlarm()}
+            onPress={() => setDrawerOpen(true)}
             activeOpacity={0.85}
           >
             <Text style={styles.fabText}>Start Trip</Text>
@@ -289,7 +403,8 @@ const TripContainer: React.FC = () => {
 
       {drawerOpen && (
         <DestinationDrawer
-          onClose={() => setDrawerOpen(false)}
+          pickMode={pickMode}
+          onClose={closeTrip}
           destInput={destInput}
           onChangeDestInput={setDestInput}
           suggestions={destInput.trim().length >= 2 ? suggestions : []}
@@ -300,6 +415,11 @@ const TripContainer: React.FC = () => {
             setGraceDistance(m);
             if (destCoords && m > 0) {
               mapRef.current?.setGrace(
+                destCoords.latitude,
+                destCoords.longitude,
+                m
+              );
+              initializeGeofencing(
                 destCoords.latitude,
                 destCoords.longitude,
                 m
@@ -334,7 +454,7 @@ const TripContainer: React.FC = () => {
                 graceDistance
               );
             }
-            alarmedRef.current = false;
+            initializeGeofencing(dc.latitude, dc.longitude, graceDistance);
           }}
         />
       )}
@@ -392,7 +512,7 @@ const styles = StyleSheet.create({
   locationBannerText: { color: "#fff", fontSize: 14, fontWeight: "600" },
   fab: {
     position: "absolute",
-    bottom: 24,
+    bottom: 32,
     left: 0,
     right: 0,
     marginHorizontal: 16,

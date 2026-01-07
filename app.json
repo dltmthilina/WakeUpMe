@@ -15,7 +15,9 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "We use your location to show your current position on the map."
+        "NSLocationWhenInUseUsageDescription": "We use your location to show your current position on the map.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "We use your location in the background to alert you when you are near your destination.",
+        "UIBackgroundModes": ["location"]
       }
     },
     "android": {
@@ -24,7 +26,11 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.logicloom.wakeupme",
-      "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"]
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"

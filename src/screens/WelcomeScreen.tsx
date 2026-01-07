@@ -31,7 +31,7 @@ const WelcomeScreen = () => {
         { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
       ]}
     >
-      <Text style={styles.appName}>WakeUpMe</Text>
+      <Text style={styles.appName}>TravelMate</Text>
     </Animated.View>
   );
 };

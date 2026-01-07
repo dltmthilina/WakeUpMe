@@ -15,6 +15,7 @@ import {
 export type Suggestion = { label: string; latitude: number; longitude: number };
 
 type Props = {
+  pickMode: boolean;
   onClose: () => void;
   destInput: string;
   onChangeDestInput: (text: string) => void;
@@ -29,6 +30,7 @@ type Props = {
 };
 
 const DestinationDrawer: React.FC<Props> = ({
+  pickMode,
   onClose,
   destInput,
   onChangeDestInput,
@@ -87,14 +89,31 @@ const DestinationDrawer: React.FC<Props> = ({
             onPress={() => setActiveTab("dest")}
             accessibilityLabel="Destination tab"
           >
-            <Text style={[styles.tabText, activeTab === "dest" && styles.tabTextActive]}>Destination</Text>
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === "dest" && styles.tabTextActive,
+              ]}
+            >
+              Destination
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.tabBtn, activeTab === "settings" && styles.tabBtnActive]}
+            style={[
+              styles.tabBtn,
+              activeTab === "settings" && styles.tabBtnActive,
+            ]}
             onPress={() => setActiveTab("settings")}
             accessibilityLabel="Settings tab"
           >
-            <Text style={[styles.tabText, activeTab === "settings" && styles.tabTextActive]}>Settings</Text>
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === "settings" && styles.tabTextActive,
+              ]}
+            >
+              Settings
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -130,7 +149,6 @@ const DestinationDrawer: React.FC<Props> = ({
                       </Text>
                     </TouchableOpacity>
                   )}
-                  
                   style={{ maxHeight: 180 }}
                 />
               )}
@@ -138,7 +156,11 @@ const DestinationDrawer: React.FC<Props> = ({
 
             <View style={styles.row}>
               <TouchableOpacity
-                style={[styles.button, styles.secondaryBtn]}
+                style={[
+                  styles.button,
+                  styles.secondaryBtn,
+                  pickMode && { opacity: 0.6 },
+                ]}
                 onPress={onPickOnMap}
                 activeOpacity={0.9}
               >
@@ -165,7 +187,8 @@ const DestinationDrawer: React.FC<Props> = ({
               placeholder="e.g. 200"
             />
             <Text style={styles.helpText}>
-              We'll draw a circle around your destination using this radius. You'll be alerted when you enter this area.
+              We'll draw a circle around your destination using this radius.
+              You'll be alerted when you enter this area.
             </Text>
           </>
         )}
@@ -283,10 +306,11 @@ const styles = StyleSheet.create({
   },
   drawerClose: {
     position: "absolute",
-    top: 8,
-    right: 8,
+    top: 4,
+    right: 4,
     width: 36,
     height: 36,
+    backgroundColor: "#f3f4f6",
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
@@ -299,6 +323,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     marginBottom: 12,
+    marginTop: 20,
   },
   tabBtn: {
     flex: 1,
