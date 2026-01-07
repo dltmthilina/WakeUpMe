@@ -299,6 +299,22 @@ const TripContainer: React.FC = () => {
     }
   };
 
+  const recenterToCurrentLocation = async () => {
+    try {
+      const current = await Location.getCurrentPositionAsync({});
+      const lat = current.coords.latitude;
+      const lon = current.coords.longitude;
+      const latest = { latitude: lat, longitude: lon };
+      setCoords(latest);
+      mapRef.current?.setCurrentLocation(lat, lon);
+      mapRef.current?.panToCurrent();
+      getAddressFromCoords(lat, lon).catch(() => {});
+    } catch (e: any) {
+      console.log("Recenter error:", e);
+      setLocationError(e?.message ?? "Failed to get current location");
+    }
+  };
+
   return (
     <View style={styles.container}>
       {loading && (
@@ -371,6 +387,16 @@ const TripContainer: React.FC = () => {
             © OpenStreetMap contributors
           </Text>
         </View>
+      )}
+
+      {!loading && !locationError && coords && (
+        <TouchableOpacity
+          style={styles.recenterFab}
+          onPress={recenterToCurrentLocation}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.recenterFabText}>◎</Text>
+        </TouchableOpacity>
       )}
 
       {locationError && (
@@ -548,6 +574,23 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   pickOverlayText: { color: "#fff", textAlign: "center" },
+  recenterFab: {
+    position: "absolute",
+    bottom: 90,
+    right: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 3,
+  },
+  recenterFabText: {
+    color: "#226f52",
+    fontSize: 22,
+    fontWeight: "700",
+  },
 });
 
 // Utility: Haversine distance in meters

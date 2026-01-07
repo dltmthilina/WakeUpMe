@@ -14,6 +14,7 @@ export type MapScreenHandle = {
   clearGrace: () => void;
   setCurrentLocation: (lat: number, lon: number) => void;
   clearTrip: () => void;
+  panToCurrent: () => void;
 };
 
 type Props = {
@@ -64,6 +65,11 @@ const MapScreen = forwardRef<MapScreenHandle, Props>(
       clearTrip: () => {
         webViewRef.current?.injectJavaScript(
           `window.clearTrip && window.clearTrip(); true;`
+        );
+      },
+      panToCurrent: () => {
+        webViewRef.current?.injectJavaScript(
+          `window.panToCurrent && window.panToCurrent(); true;`
         );
       },
     }));
@@ -135,10 +141,12 @@ function buildLeafletHtml(lat: number, lon: number) {
         }).addTo(map);
   let you = L.marker([current.lat, current.lon]).addTo(map).bindPopup('You are here');
 
-        let pickMode = false;
-        let destMarker = null;
-  let routeLayer = L.layerGroup().addTo(map);
-  let graceCircle = null;
+          let pickMode = false;
+          let destMarker = null;
+          let routeLayer = L.layerGroup().addTo(map);
+          let graceCircle = null;
+          let routePolylines = [];
+          let selectedRouteIndex = null;
 
         function sendMessage(obj) {
           try {
@@ -172,21 +180,55 @@ function buildLeafletHtml(lat: number, lon: number) {
           }
         };
 
-        // Draw route using OSRM demo server (for development only)
+        // Draw one or more routes using OSRM demo server (for development only)
         window.drawRoute = async function(fromLat, fromLon, toLat, toLon) {
           try {
             routeLayer.clearLayers();
-            var url = 'https://router.project-osrm.org/route/v1/driving/' + fromLon + ',' + fromLat + ';' + toLon + ',' + toLat + '?overview=full&geometries=geojson';
+            routePolylines = [];
+            selectedRouteIndex = null;
+
+            var url = 'https://router.project-osrm.org/route/v1/driving/'
+              + fromLon + ',' + fromLat + ';' + toLon + ',' + toLat
+              + '?overview=full&geometries=geojson&alternatives=true';
+
             var res = await fetch(url);
             var json = await res.json();
-            if (!json || json.code !== 'Ok' || !json.routes || !json.routes[0]) {
+            if (!json || json.code !== 'Ok' || !json.routes || !json.routes.length) {
               sendMessage({ type: 'routeError', message: 'No route found' });
               return;
             }
-            var coords = json.routes[0].geometry.coordinates.map(function(p) { return [p[1], p[0]]; });
-            var poly = L.polyline(coords, { color: '#1e90ff', weight: 4 });
-            routeLayer.addLayer(poly);
-            map.fitBounds(poly.getBounds(), { padding: [30, 30] });
+
+            var colors = ['#1e90ff', '#22c55e', '#f97316', '#a855f7', '#0ea5e9'];
+
+            json.routes.forEach(function(route, index) {
+              var coords = route.geometry.coordinates.map(function(p) { return [p[1], p[0]]; });
+              var isPrimary = index === 0;
+              var poly = L.polyline(coords, {
+                color: colors[index % colors.length],
+                weight: isPrimary ? 5 : 3,
+                opacity: isPrimary ? 0.95 : 0.65,
+              }).addTo(routeLayer);
+
+              poly.on('click', function() {
+                selectedRouteIndex = index;
+                routePolylines.forEach(function(p, i) {
+                  if (!p) return;
+                  if (i === index) {
+                    p.setStyle({ weight: 6, opacity: 1.0 });
+                    p.bringToFront();
+                  } else {
+                    p.setStyle({ weight: 3, opacity: 0.5 });
+                  }
+                });
+              });
+
+              routePolylines.push(poly);
+            });
+
+            // Fit to first route by default
+            if (routePolylines[0]) {
+              map.fitBounds(routePolylines[0].getBounds(), { padding: [30, 30] });
+            }
           } catch (e) {
             sendMessage({ type: 'routeError', message: String(e) });
           }
@@ -209,6 +251,13 @@ function buildLeafletHtml(lat: number, lon: number) {
           }
         };
 
+        // Pan map to current "you" marker
+        window.panToCurrent = function() {
+          if (you) {
+            map.panTo(you.getLatLng());
+          }
+        };
+
         // Clear destination, route and grace circle
         window.clearTrip = function() {
           if (destMarker) {
@@ -221,6 +270,12 @@ function buildLeafletHtml(lat: number, lon: number) {
           if (graceCircle) {
             map.removeLayer(graceCircle);
             graceCircle = null;
+          }
+        };
+
+        window.panToCurrent = function() {
+          if (you) {
+            map.panTo(you.getLatLng());
           }
         };
 
